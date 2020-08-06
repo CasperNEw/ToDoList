@@ -18,10 +18,7 @@ class SceneDelegate: UIResponder, UIWindowSceneDelegate {
         guard let windowScene = (scene as? UIWindowScene) else { return }
         window = UIWindow(frame: windowScene.coordinateSpace.bounds)
         window?.windowScene = windowScene
-
-        let viewController = MainViewController()
-        let navigationController = UINavigationController(rootViewController: viewController)
-        window?.rootViewController = navigationController
+        window?.rootViewController = createInitialViewController()
         window?.makeKeyAndVisible()
     }
 
@@ -36,5 +33,26 @@ class SceneDelegate: UIResponder, UIWindowSceneDelegate {
     func sceneDidEnterBackground(_ scene: UIScene) {
 
         (UIApplication.shared.delegate as? AppDelegate)?.saveContext()
+    }
+}
+
+// MARK: - Module functions
+extension SceneDelegate {
+
+    private func createInitialViewController() -> UIViewController {
+
+        let context = (UIApplication.shared.delegate as? AppDelegate)?
+            .persistentContainer
+            .viewContext
+
+        let viewController = MainViewController()
+
+        if let context = context {
+            let database = TaskRepository(context: context)
+            viewController.database = database
+        }
+
+        let navigationController = UINavigationController(rootViewController: viewController)
+        return navigationController
     }
 }

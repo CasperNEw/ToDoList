@@ -7,20 +7,32 @@
 //
 
 import UIKit
+import CoreData
 
 class MainViewController: UIViewController {
 
     // MARK: - Properties
-    private let tableView = UITableView()
-    private var tasks: [String] = []
+    private lazy var tableView = UITableView(frame: view.frame)
+
+    var database: TaskRepository?
+
+    private var tasks: [Task] = [] {
+        didSet { tableView.reloadData() }
+    }
+
+    // MARK: - Initialization
+    convenience init(database: TaskRepository) {
+        self.init()
+        self.database = database
+    }
 
     // MARK: - Lifecycle
     override func viewDidLoad() {
         super.viewDidLoad()
 
-        view.backgroundColor = #colorLiteral(red: 0.9254902005, green: 0.2352941185, blue: 0.1019607857, alpha: 1)
         setupTableView()
         setupNavigationItem()
+        loadData()
     }
 
     // MARK: - Module functions
@@ -31,29 +43,29 @@ class MainViewController: UIViewController {
         tableView.tableFooterView = UIView()
         view.addSubview(tableView)
 
-        tableView.translatesAutoresizingMaskIntoConstraints = false
-
-        NSLayoutConstraint.activate([
-            tableView.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor),
-            tableView.leadingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.leadingAnchor),
-            tableView.trailingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.trailingAnchor),
-            tableView.bottomAnchor.constraint(equalTo: view.safeAreaLayoutGuide.bottomAnchor)
-        ])
-
         tableView.register(UINib(nibName: ToDoTableViewCell.identifier, bundle: nil),
                            forCellReuseIdentifier: ToDoTableViewCell.identifier)
     }
 
     private func setupNavigationItem() {
-
         let addButton = UIBarButtonItem(barButtonSystemItem: .add, target: self, action: #selector(addButtonTapped))
         navigationItem.rightBarButtonItem = addButton
         navigationItem.title = "To-Do List"
     }
 
-    // MARK: - Actions
-    @objc func addButtonTapped() {
-        print(#function)
+    private func loadData() {
+
+        database?.loadData { [weak self] result in
+            switch result {
+            case .success(let tasks):
+                self?.tasks = tasks
+            case .failure(let error):
+                print(error)
+            }
+        }
+    }
+
+    private func createAlertController() -> UIAlertController {
 
         let alertController = UIAlertController(title: "New Task",
                                                 message: "Please add a new task",
@@ -62,13 +74,19 @@ class MainViewController: UIViewController {
         alertController.addTextField { _ in }
 
         let saveAction = UIAlertAction(title: "Save",
-                                       style: .default) { action in
+                                       style: .default) { _ in
 
-            let textField = alertController.textFields?.first
-            if let newTask = textField?.text {
-                self.tasks.insert(newTask, at: 0)
-                self.tableView.reloadData()
-            }
+                let textField = alertController.textFields?.first
+                if let property = textField?.text {
+                    self.database?.saveData(property, completion: { result in
+                        switch result {
+                        case .success(let savedTask):
+                            self.tasks.append(savedTask)
+                        case .failure(let error):
+                            print(error)
+                        }
+                    })
+                }
         }
 
         let cancelAction = UIAlertAction(title: "Cancel",
@@ -76,8 +94,14 @@ class MainViewController: UIViewController {
 
         alertController.addAction(saveAction)
         alertController.addAction(cancelAction)
-        present(alertController, animated: true)
 
+        return alertController
+    }
+
+    // MARK: - Actions
+    @objc func addButtonTapped() {
+        let alertController = createAlertController()
+        present(alertController, animated: true)
     }
 }
 
@@ -94,7 +118,19 @@ extension MainViewController: UITableViewDelegate, UITableViewDataSource {
             .dequeueReusableCell(withIdentifier: ToDoTableViewCell.identifier,
                                  for: indexPath) as? ToDoTableViewCell
 
-        cell?.textLabel?.text = tasks[indexPath.row]
+        cell?.textLabel?.text = tasks[indexPath.row].title
         return cell ?? UITableViewCell()
+    }
+
+    func tableView(_ tableView: UITableView, didSelectRowAt indexPath: IndexPath) {
+
+        database?.removeData(tasks[indexPath.row]) { [weak self] result in
+            switch result {
+            case .success(let removedTask):
+                self?.tasks.removeAll { $0 == removedTask }
+            case .failure(let error):
+                print(error)
+            }
+        }
     }
 }
